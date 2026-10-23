@@ -267,15 +267,17 @@ def render_progress():
         if job['error']:
             st.error(f"Scoring stopped: {job['error']}")
         q = job['query']
-        if q.unknown_target or q.unknown_background or q.outside_background:
-            with st.expander(f'Gene matching · {len(q.unknown_target)+len(q.outside_background)} target symbols excluded', expanded=False):
-                if q.unknown_target: st.warning('Targets not in dataset: '+', '.join(q.unknown_target))
-                if q.unknown_background: st.warning('Background genes not in dataset: '+', '.join(q.unknown_background))
-                if q.outside_background: st.warning('Targets outside background: '+', '.join(q.outside_background))
         used = genes_used(genes, q, GENE_COLUMNS)
         targets = used.symbol[used.role.eq('target')]
-        with st.expander(f'Genes used · {len(targets):,} targets in a {len(used):,}-gene universe', expanded=False):
-            st.markdown('**Targets:** '+', '.join(targets))
+        excluded = len(q.unknown_target) + len(q.outside_background)
+        title = f"Gene matching · {len(targets):,} target{'s' if len(targets) != 1 else ''} used in a {len(used):,}-gene universe"
+        if excluded:
+            title += f" · {excluded} target symbol{'s' if excluded != 1 else ''} excluded"
+        with st.expander(title, expanded=False):
+            st.markdown('**Targets used:** '+', '.join(targets))
+            if q.unknown_target: st.warning('Targets not in dataset: '+', '.join(q.unknown_target))
+            if q.unknown_background: st.warning('Background genes not in dataset: '+', '.join(q.unknown_background))
+            if q.outside_background: st.warning('Targets outside background: '+', '.join(q.outside_background))
             st.caption('The download lists every gene of the scoring universe (all retained genes, or your background) with its role.')
             st.download_button('Download genes used', lambda used=used: used.to_csv(index=False).encode(),
                                file_name=f"{manifest['dataset']}-genes-used.csv", mime='text/csv', key='download_genes')

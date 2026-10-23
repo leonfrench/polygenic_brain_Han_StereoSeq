@@ -94,6 +94,19 @@ def test_new_gene_set_clears_the_tables_before_showing_its_own():
     assert after.iloc[0, 0] != before.iloc[0, 0] and not after.equals(before)
 
 
+def test_gene_matching_lists_used_targets_and_excluded_symbols():
+    app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=120).run()
+    app.text_area(key='target_input').set_value('Tac2 Chat NOT_A_GENE').run()
+    app.text_area(key='background_input').set_value('Tac2 Gfap Aqp4 ALSO_MISSING').run()
+    assert not app.exception
+    matching = next(e for e in app.expander if e.label.startswith('Gene matching'))  # one panel for used and excluded genes
+    assert matching.label == 'Gene matching · 1 target used in a 3-gene universe · 2 target symbols excluded'
+    assert matching.markdown[0].value == '**Targets used:** Tac2'
+    assert [w.value for w in matching.warning] == ['Targets not in dataset: NOT_A_GENE', 'Background genes not in dataset: ALSO_MISSING',
+                                                   'Targets outside background: CHAT']
+    assert not any(e.label.startswith('Genes used') for e in app.expander)
+
+
 def test_human_symbols_background_and_invalid_queries():
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=120).run()
     app.selectbox(key='input_species').set_value('Human').run()
@@ -103,8 +116,11 @@ def test_human_symbols_background_and_invalid_queries():
     assert app.session_state['job']['query'].target_symbols == ('MBP', 'PLP1')
     app.text_area(key='background_input').set_value('MBP PLP1 SNAP25 GAPDH').run()
     assert app.session_state['job']['query'].universe_size == 4
-    used = next(e for e in app.expander if e.label.startswith('Genes used'))  # mouse orthologs inside the background
-    assert used.label == 'Genes used · 2 targets in a 4-gene universe' and used.markdown[0].value == '**Targets:** Mbp, Plp1'
+    matching = next(e for e in app.expander if e.label.startswith('Gene matching'))  # mouse orthologs inside the background
+    assert matching.label == 'Gene matching · 2 targets used in a 4-gene universe'
+    assert matching.markdown[0].value == '**Targets used:** Mbp, Plp1'
+    # GAPDH has two mouse orthologs; Gm20899 is not in the dataset.
+    assert [w.value for w in matching.warning] == ['Background genes not in dataset: GM20899']
     app.text_area(key='background_input').set_value('MBP PLP1').run()
     assert app.session_state['job'] is None and 'non-target' in app.session_state['query_error']
     app.text_area(key='target_input').set_value('NOT_A_GENE').run()

@@ -43,8 +43,9 @@ dataset.
 - **Genes**: mouse symbols by default (matched case-insensitively). Human or rhesus macaque symbols are
   converted to mouse orthologs with the bundled HomoloGene snapshot (`data/homologene_to_human.csv.gz`);
   one-to-many orthologs are all kept and unmapped symbols are reported. An optional background is the
-  complete universe, including the targets; ranks are recomputed inside it. **Genes used** lists the matched
-  targets, and its download gives every gene of the scoring universe with its role (target or background).
+  complete universe, including the targets; ranks are recomputed inside it. **Gene matching** lists the targets
+  used and any symbols left out, and its download gives every gene of the scoring universe with its role (target or
+  background).
 - **Colour cells by**: gene-set AUROC, cell type, region, cell type AUROC or region AUROC (the last two
   colour each cell by its label's specificity AUROC from the tables). The cell type level
   (class / subclass / cluster) and region level (division / area / finest) set both the colours and the tables.
