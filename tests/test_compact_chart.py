@@ -81,6 +81,16 @@ def test_geometry_keeps_cell_order_labels_and_colours():
     assert (merfish['um_per_unit'], merfish['noun'], merfish['dot']) == (1.0, 'sections', g['dot'])
 
 
+def test_square_bins_keep_exact_float_positions():
+    cells = toy_cells()
+    px, py = slice_grid(cells, ['T1', 'T2'])[:2]
+    g = geometry_payload(cells, ['T1', 'T2'], ANNOTATIONS, items='bins', marker='square')
+    assert (g['marker'], g['items'], g['positions'], g['step']) == ('square', 'bins', '<f4', 1.0)
+    np.testing.assert_array_equal(decode(g['px'], '<f4'), px.astype(np.float32))
+    np.testing.assert_array_equal(decode(g['py'], '<f4'), py.astype(np.float32))
+    assert geometry_payload(cells, ['T1', 'T2'], ANNOTATIONS)['positions'] == '<u2'  # cells stay 16-bit
+
+
 
 def test_categorical_labels_give_the_same_sorted_labels_and_codes_as_strings():
     values = pd.Series(['b', 'a', 'c', 'a', 'b'])
@@ -104,6 +114,7 @@ def test_delayed_ack_sends_only_new_scores_and_remount_recovers(monkeypatch):
     session['cell_plot'] = dict(client='browser', version=None, seq=-1)
     chart.cell_chart(cells, np.array([.1, np.nan, np.nan, np.nan]), **args)
     assert sent[-1]['cell_aurocs'] == {'A': .6} and sent[-1]['hover'] is None  # the default tooltip
+    assert sent[-1]['absolute'] is False  # gene-set colours are relative per slice unless asked
     first = sent[-1]['packet']['seq']
     chart.cell_chart(cells, np.array([.1, .2, np.nan, np.nan]), **args)
     session['cell_plot'] = dict(client='browser', version='slices-1', seq=first)
@@ -120,3 +131,5 @@ def test_delayed_ack_sends_only_new_scores_and_remount_recovers(monkeypatch):
     hover = dict(levels=['cell_subclass', 'region'], slice_with='region')
     chart.cell_chart(cells, np.array([.1, .2, .3, np.nan]), **args, hover=hover)
     assert sent[-1]['hover'] == hover
+    chart.cell_chart(cells, np.array([.1, .2, .3, np.nan]), **args, absolute=True)
+    assert sent[-1]['absolute'] is True

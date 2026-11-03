@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import os
 import time
+import uuid
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -15,10 +16,14 @@ from spatial_app.view import score_limits
 from spatial_app.chart import cell_chart
 from spatial_app.enrichment import MIN_CELLS, specificity_z, rank_profiles, specificity_table, format_p_value
 from spatial_app.orthologs import SPECIES, map_input
+from spatial_app.bins import MIN_BIN_CELLS, load_bins, bin_scores
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get('MOUSE_APP_DATA', str(ROOT/'data/mouse1'))).resolve()
-MODES = ('Gene-set AUROC', 'Cell type', 'Region', 'Cell type AUROC', 'Region AUROC')
+# Square bins of cells (scripts/prepare_mouse_bins.py), one more colour mode when built from these cells.
+BINS = Path(os.environ.get('MOUSE_APP_BINS', str(ROOT/'data/mouse1-bins178um'))).resolve()
+MODES = ('Gene-set AUROC', 'Cell type AUROC', 'Region AUROC')
+LABEL_MODES = ('Cell type', 'Region')  # plain label colours, listed last (after the bin mode)
 CELL_LEVELS = ('cell_class', 'cell_subclass', 'cell_cluster')
 REGION_LEVELS = ('region_division', 'region_area', 'region')
 PARENT = {'cell_cluster': 'cell_subclass', 'cell_subclass': 'cell_class'}
@@ -27,6 +32,9 @@ GENE_COLUMNS = ('symbol', 'mgi_id', 'name', 'n_cells_detected')  # in the genes-
 # Tooltip levels (the chosen class or division is added when selected); the cluster goes in the subclass's brackets
 # and the slice on the area line.
 HOVER = dict(levels=['cell_subclass', 'region_area', 'region'], brackets={'cell_subclass': 'cell_cluster'}, slice_with='region_area')
+# The binned view's tooltip: the bin (its cells and grid position), then the most common subclass and area of its cells. The
+# sidebar's cell type and region levels are added when not listed, each first within its kind (so a cluster comes before the subclass).
+BIN_HOVER = dict(levels=['bin', 'cell_subclass', 'region_area'], slice_with=None)
 # The cell columns the app uses; labels load as categories (54 MB for the 741k cells instead of 213 MB).
 LABEL_COLUMNS = (*CELL_LEVELS, *REGION_LEVELS)
 CELL_COLUMNS = ('cell_index', 'slice', 'source_obs_id', 'cell_id', 'rx', 'ry', 'draw_order', *LABEL_COLUMNS)
@@ -80,19 +88,25 @@ def display_cells(path, version, slices):
 
 @st.cache_resource(max_entries=12, show_spinner=False)
 def specificity_profiles(path, version, slices, level):
-    """Pseudobulk z-scores and gene ranks per label, summed over the given slices."""
+    """Pseudobulk z-scores and gene ranks per label, summed over the given slices, and the slices its cells come from."""
     manifest = metadata(path, version)[0]
     labels = np.asarray(manifest['pseudobulk']['labels'][level])
-    counts = np.zeros((len(labels), manifest['n_genes'])); cells = np.zeros(len(labels), np.int64)
+    counts = np.zeros((len(labels), manifest['n_genes'])); cells = np.zeros(len(labels), np.int64); n_slices = np.zeros(len(labels), np.int64)
     for entry in manifest['slices']:
         if entry['id'] in slices:
             with np.load(Path(path)/entry['pseudobulk'], allow_pickle=False) as z:
                 index = z[f'{level}_index']
-                counts[index] += z[f'{level}_counts']; cells[index] += z[f'{level}_cells']
+                counts[index] += z[f'{level}_counts']; cells[index] += z[f'{level}_cells']; n_slices[index] += z[f'{level}_cells'] > 0
     keep, z = specificity_z(counts, cells)
     ranks, ties = rank_profiles(z)
-    return dict(labels=labels[keep], cells=cells[keep], z=z, ranks=ranks, ties=ties,
+    return dict(labels=labels[keep], cells=cells[keep], slices=n_slices[keep], z=z, ranks=ranks, ties=ties,
                 excluded=int(((cells > 0) & ~keep).sum()))
+
+
+@st.cache_resource(show_spinner=False)
+def bin_metadata(path, version, _annotations):
+    """Read-only bins of cells shared across sessions: manifest, bins in drawing order, their annotation levels."""
+    return load_bins(path, _annotations)
 
 
 # Retain only the current batch so progressive scoring does not accumulate
@@ -115,6 +129,13 @@ checksums = {f['path']: f['sha256'] for f in manifest['files']}
 slice_info = {s['id']: s for s in manifest['slices']}
 slice_ids = list(slice_info)
 version = f"{DATA}:{manifest['created_utc']}"
+try:  # the binned mode needs bins built from this cell dataset
+    bin_data = bin_metadata(str(BINS), (BINS/'manifest.json').stat().st_mtime_ns, annotations)
+    if bin_data[0]['source']['created_utc'] != manifest['created_utc']:
+        bin_data = None
+except (OSError, ValueError, KeyError):
+    bin_data = None
+bin_mode = f"{bin_data[0]['bin_um']:g}µm bin AUROC" if bin_data else None
 
 
 def ordinal(n):
@@ -169,8 +190,9 @@ with st.sidebar:
             st.session_state.job = dict(query=query, compute_seconds=0.0, load_seconds=0.0, error=None)
         except (ValueError, OSError) as exc:
             st.session_state.query_error = str(exc)
-    st.radio('Colour cells by', MODES, key='colour_mode', horizontal=False,
-        help='Cell type and region AUROC colour each cell by the expression-specificity AUROC of its annotation (the tables below).')
+    st.radio('Colour cells by', MODES + ((bin_mode,) if bin_mode else ()) + LABEL_MODES, key='colour_mode', horizontal=False,
+        help='Cell type and region AUROC colour each cell by the expression-specificity AUROC of its annotation (the tables below).'
+             + (' The binned mode shows square bins of cells instead, each scored on the summed counts of its cells.' if bin_mode else ''))
     level_columns = st.columns(2, gap='small')
     cell_level = level_columns[0].selectbox('Cell type level', CELL_LEVELS, index=1, key='cell_level',
         format_func=lambda k: annotations[k]['title'], help='Annotation level used for cell type colours and the cell type table.')
@@ -215,15 +237,19 @@ def enrichment_tables(query):
                 universe = np.asarray(query.background)
                 ranks, ties = rank_profiles(profiles['z'][:, universe])
                 target = np.searchsorted(universe, query.target)
+            # Region labels are acronyms (the table's heading names the level); cell type labels go under their level's title.
             table = specificity_table(ranks, ties, target, profiles['labels'], profiles['cells'],
-                                      label_column=annotations[level]['title'])
+                                      label_column='Acronym' if level in REGION_LEVELS else annotations[level]['title'])
             table.attrs['excluded'] = profiles['excluded']
             tables.append(table)
         cell_table, region_table = tables
         if cell_level in PARENT:
             parents = view.drop_duplicates(cell_level).set_index(cell_level)[PARENT[cell_level]]
             cell_table.insert(1, annotations[PARENT[cell_level]]['title'], cell_table.iloc[:, 0].map(parents).to_numpy())
-        region_table.insert(1, 'Description', region_table.iloc[:, 0].map(annotations[region_level]['descriptions']).to_numpy())
+        region_table.insert(1, 'Full name', region_table.iloc[:, 0].map(annotations[region_level]['descriptions']).to_numpy())
+        # A region whose cells come from one or a few slices may be a slice-specific artifact.
+        regions = specificity_profiles(str(DATA), data_version, tuple(selected), region_level)
+        region_table.insert(3, '# slices', region_table.iloc[:, 0].map(dict(zip(regions['labels'], regions['slices']))).to_numpy())
         cache.clear()  # one selection at a time
         cache[key] = (cell_table, region_table)
     return cache[key]
@@ -288,7 +314,44 @@ def render_progress():
         st.info('All cells are shown. Enter a valid target gene set to calculate AUROC automatically, or colour by cell type or region.')
 
 
+def render_bins():
+    """Square bins of cells in place of the cells, on one absolute AUROC scale for all slices, without clipping."""
+    job = st.session_state.job
+    bin_manifest, bins, levels = bin_data
+    values = np.full(len(bins), np.nan)
+    if job:
+        cache = st.session_state.setdefault('bin_scores', {})
+        key = (input_signature, bin_manifest['created_utc'])  # a rebuilt bins folder is scored again
+        if key not in cache:
+            cache.clear()  # one query at a time
+            with st.spinner('Scoring the bins…'):
+                # Stored before the spinner closes: a rerun arriving then would otherwise discard the scores. A failure is
+                # stored too, so it is not retried on every fragment tick; the log has the details, the page a reference.
+                try:
+                    cache[key] = (bin_scores(str(BINS), bin_manifest, bins, job['query'], len(genes)), None)
+                except Exception as exc:
+                    reference = uuid.uuid4().hex[:8]
+                    print(f'[error] bin scoring failed, reference {reference}: {exc!r}', flush=True)
+                    cache[key] = (values, reference)
+        values, reference = cache[key]
+        if reference:
+            st.error(f'Unable to score the bins (reference {reference}).')
+    with st.container(key='cell_chart_panel'):
+        cell_chart(bins, values, slices=[s['id'] for s in bin_manifest['slices']], annotations=levels,
+                   version=f"{BINS}:{bin_manifest['created_utc']}", mode=mode, cell_level=cell_level, region_level=region_level,
+                   cell_aurocs={}, region_aurocs={}, clip=0, filename=f"{manifest['dataset']}-bins-spatial", hover=BIN_HOVER,
+                   absolute=True, items='bins', marker='square')
+        st.caption(f"Each square is a {bin_manifest['bin_um']:g} µm bin of one lattice shared by all slices, the pseudobulk of the cells whose centroid "
+                   'lies in it; its gene-set AUROC ranks genes within the bin, as for single cells. '
+                   f'Grey bins are not scored: they have fewer than {MIN_BIN_CELLS} cells, or no gene set has been scored yet. '
+                   'Colours are absolute AUROC values on one scale for all slices, '
+                   'from the lowest to the highest bin, without clipping. Hover for the bin and the most common cell type and region of its cells.')
+
+
 def render_chart(cell_table, region_table):
+    if mode == bin_mode:
+        render_bins()
+        return
     job = st.session_state.job
     scores = st.session_state.scores[view_index]
     aucs = lambda table: dict(zip(table.iloc[:, 0], table['AUROC'])) if table is not None else {}
@@ -346,6 +409,9 @@ def render_tables():
             first = 'small' if kind == 'Region' else 'medium'
             widths = {name: st.column_config.TextColumn(name, width=w) for name, w in zip(table.columns[:2], [first, 'medium'])}
             widths['Cells'] = st.column_config.NumberColumn('Cells', format='%d', width='small', help='Cells in this pseudobulk, across all slices (left hemisphere only for regions).')
+            if '# slices' in table:
+                widths['# slices'] = st.column_config.NumberColumn('# slices', format='%d', width='small',
+                    help='Slices with cells in this pseudobulk (left hemisphere). A region from one or a few slices may be a slice-specific artifact.')
             # A new key resets the row selection: when the table changes, or when the other table was clicked.
             epoch = st.session_state.setdefault('pick_epochs', {}).get(kind, 0)
             pick_key = f"pick_{kind}_{level}_{abs(hash((input_signature, tuple(selected))))}_{epoch}"

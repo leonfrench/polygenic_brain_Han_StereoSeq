@@ -26,8 +26,9 @@ dataset.
 - Main file: `app.py`. Python 3.12 is the development version; the app and its tests also pass on Python 3.14 with a
   clean install of `requirements.txt` (the preprocessing tests are skipped there). `requirements.txt` is the dependency
   file Community Cloud installs; do not add an `environment.yml`, which it would install instead.
-- The prepared data (1.3 GB in 89 files; every file is under GitHub's 100 MB limit, the largest is 49 MB) is committed in
-  plain git, so no Git LFS is needed. The first deploy clones all of it.
+- The prepared data (1.5 GB in 107 files: 1.3 GB of cells in `data/mouse1/` and 185 MB of bins in `data/mouse1-bins178um/`;
+  every file is under GitHub's 100 MB limit, the largest is 49 MB) is committed in plain git, so no Git LFS is needed. The
+  first deploy clones all of it.
 - Memory: Community Cloud allows up to 2.7 GB. A local server held about 0.4 GB at rest and peaked at 1.4 GB while a
   browser session scored every cell and switched through all levels and colour modes; a second concurrent session did
   not raise the peak. Only the current score batch is held in memory, label columns load as categories, and the plot
@@ -46,9 +47,10 @@ dataset.
   complete universe, including the targets; ranks are recomputed inside it. **Gene matching** lists the targets
   used and any symbols left out, and its download gives every gene of the scoring universe with its role (target or
   background).
-- **Colour cells by**: gene-set AUROC, cell type, region, cell type AUROC or region AUROC (the last two
+- **Colour cells by**: gene-set AUROC, cell type AUROC, region AUROC, then cell type or region (the two label AUROC modes
   colour each cell by its label's specificity AUROC from the tables). The cell type level
   (class / subclass / cluster) and region level (division / area / finest) set both the colours and the tables.
+  A fourth option, before cell type and region, shows the gene-set AUROC of [square bins of cells](#binned-view) instead of the cells.
 - **Plot**: one panel per slice, all sharing the same registered frame and scale, so slices keep their
   registered position and relative size, on a black background. Dots are sized to the median nearest-cell
   spacing (~14 µm). AUROC ranges differ between slices (batch effects), so gene-set AUROC colours are relative
@@ -65,7 +67,8 @@ dataset.
   a download of every cell's score once scoring completes. The tables use pseudobulk profiles, not
   cell scores, so they appear as soon as the gene set is valid. Tick a row's checkbox to colour the plot by that
   table's specificity AUROC (cell type or region) and highlight the label; untick it to return to the previous
-  colour mode.
+  colour mode. The region table's **# slices** counts the slices with cells in each region's pseudobulk (left hemisphere), so a
+  region found in only one or a few slices, possibly a slice-specific artifact, stands out.
 
 ## Data
 
@@ -160,6 +163,31 @@ Output (`data/mouse1/`, 1.41 GB for 16 slices, of which 81 MB is pseudobulk; lar
 455 unmapped, 2 ambiguous withdrawn symbols). All slices share the registered frame: from 3.2 × 1.6 mm (T241,
 olfactory bulb tip) to 7.1 × 6.5 mm (T319), at 0.5 µm per unit.
 
+## Binned view
+
+```bash
+./.conda-env/bin/python scripts/prepare_mouse_bins.py --bin-um 178
+```
+
+Each slice's cells are grouped by centroid into the squares of one lattice shared by all slices (they share the registered
+frame), so every bin is the same size and smaller slices simply have fewer bins. A bin's counts are the summed retained-gene UMIs
+of its cells, ranked within the bin as for cells. `--bin-um` sets the side; `--bins N` instead fits N squares across the widest
+slice (178 µm = 7.12 mm / 40). The cell dataset stores ranks, not counts, so the raw spot tables in `data/Han et al./` are read
+again, streamed from the gzip files; every cell's retained UMIs and every slice's gene totals are checked against the cell dataset,
+and 64 bins per slice against `scipy.stats.rankdata`. The 16 slices at 178 µm take about 9 minutes with peak memory of 8 GB and
+give 12,347 bins (106 in T241 to 1,237 in T319). The script also writes per-bin counts, each cell's bin and copies of the gene
+table, annotations and label pseudobulks; the app reads only `manifest.json`, `bins.parquet` (grid position, centre, cells, UMIs,
+and the most common label of each level with its share) and `ranks/<SLICE>.npz` (the cell batch format, one row per bin), so
+only those are committed in `data/mouse1-bins178um/` (185 MB), with the manifest's file list trimmed to them.
+
+When the bins were built from the app's cell dataset, **Colour cells by** gains *178µm bin AUROC*: the plot shows the
+bins instead of the cells, each with a gene-set AUROC from its within-bin ranks, on one absolute scale for all slices from the lowest
+to the highest bin, without clipping. Bins with fewer than 20 cells are grey and not scored. The tooltip gives the bin's cells and
+grid position and the most common subclass and area of its cells, plus the sidebar's cell type and region levels when they differ
+(each first within its kind, so a cluster comes before the subclass). Bin scores read one slice's ranks at a time. If scoring fails,
+the page shows a reference that matches the error in the server log. The tables are unchanged. `MOUSE_APP_BINS=/path/to/bins`
+selects other bins; only the per-slice layout of the current script is offered.
+
 ## Cell type × region cross-tabulation
 
 ```bash
@@ -205,7 +233,8 @@ node tests/test_cells.cjs
 
 These cover rank encoding and scoring against SciPy and pairwise definitions, pseudobulk sums,
 specificity z-scores and AUROCs against `mannwhitneyu`, ortholog mapping, region parsing and translation, the slice grid
-layout, the score transport protocol, the canvas helpers, and end-to-end app runs on `data/mouse1`. With only
+layout, the score transport protocol, the canvas helpers, bin scoring order and square bin positions, and end-to-end app runs
+on `data/mouse1` and its bins in `data/mouse1-bins178um`. With only
 `requirements.txt` installed, the preprocessing tests are skipped.
 
 ## Data credit

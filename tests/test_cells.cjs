@@ -18,6 +18,7 @@ assert.deepEqual(per[1],[1050,1950]);assert(Math.abs(per[0][0]-5.95)<1e-9);asser
 assert.deepEqual(R.disc(2),[[0,0,2],[1,0,2]]);
 for(const size of [4,7,12]){const spans=R.disc(size);for(const [y,a,b] of spans){assert(a>=0&&b<=size);const mirror=spans.find(s=>s[0]===size-1-y);assert.deepEqual([mirror[1],mirror[2]],[a,b]);}}
 const buf=new Uint32Array(25);R.stamp(buf,5,5,-1,3,R.disc(3),9);assert.equal(buf.filter(v=>v===9).length,4);// clipped at the edges
+assert.deepEqual(R.square(3,2),[[0,0,3],[1,0,3]]);
 // Nearest-cell lookup across bucket boundaries, with quantization step and radius.
 const px=new Uint16Array([10,50,51,400]),py=new Uint16Array([10,50,49,400]);
 const index=R.buildIndex(px,py,2,1000,1000,64);

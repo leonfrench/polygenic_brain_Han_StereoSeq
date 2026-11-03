@@ -34,7 +34,9 @@ function pct(q){return ordinal(Math.round(q*100));}
 const MIN_HEIGHT=440;
 let g=null,scores=null,version=null,seq=-1,mode='Gene-set AUROC',cellLevel='cell_subclass',regionLevel='region_area',
  cellAucs={},regionAucs={},filename='cells',colors=null,front=null,low=0,high=1,highlight=null,dirty=true,frame=null,
- scale=1,panX=0,panY=0,moved=false,img=null,index=null,plotHeight=0,signature='',ranges=null,highlightSeq=null,hover=null;
+ scale=1,panX=0,panY=0,moved=false,img=null,index=null,plotHeight=0,signature='',ranges=null,highlightSeq=null,hover=null,absolute=false;
+// What the points are (cells, or bins drawn as squares) for the status line, panel headers and legend notes.
+function items(){return g&&g.items||'cells';}
 
 function decode(s,Type){const bin=atob(s),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new Type(bytes.buffer);}
 function levelKey(){return mode.startsWith('Cell type')?cellLevel:mode.startsWith('Region')?regionLevel:null;}
@@ -55,6 +57,13 @@ function shade(v){return LUT[Math.round(Math.max(0,Math.min(1,(v-low)/(high-low|
 function computeColors(){
  const n=g.n,key=levelKey(),lvl=key?g.levels[key]:null;
  if(!colors||colors.length!==n){colors=new Uint32Array(n);front=new Uint8Array(n);}
+ if(!lvl&&absolute){
+  // One AUROC scale over all points shown, as for the label AUROCs: a single slice has no batch effects between slices,
+  // and bins can share one scale across slices.
+  ranges=null;[low,high]=R.clippedLimits(scores,CLIP)||[0,1];
+  for(let i=0;i<n;i++){const v=scores[i];if(Number.isFinite(v)){colors[i]=shade(v);front[i]=1;}else{colors[i]=GREY;front[i]=0;}}
+  return;
+ }
  if(!lvl){
   // Each slice spans its own CLIP to 1-CLIP quantiles: AUROC ranges differ between slices.
   ranges=R.groupLimits(scores,g.slice,g.panels.length,CLIP);
@@ -80,15 +89,18 @@ function scaleBar(ticks,text){
  const note=document.createElement('div');note.className='note';note.textContent=text;legendEl.append(note);
  legendEl.append(bar);
 }
-function valueTicks(){const digits=R.precision(low,high);return [0,1,2,3,4].map(i=>(i===0?'≤ ':i===4?'≥ ':'')+(low+i/4*(high-low)).toFixed(digits));}
+// The end ticks are bounds only when the scale is clipped; with CLIP = 0 they are the lowest and highest values.
+function valueTicks(){const digits=R.precision(low,high);return [0,1,2,3,4].map(i=>(CLIP>0&&i===0?'≤ ':CLIP>0&&i===4?'≥ ':'')+(low+i/4*(high-low)).toFixed(digits));}
+function clipNote(){return CLIP>0?'Clipped at the '+pct(CLIP)+' and '+pct(1-CLIP)+' percentiles of the '+items()+' shown.':'From the lowest to the highest value of the '+items()+' shown.';}
 function legend(){
  legendEl.replaceChildren();clearButton.hidden=highlight===null;
  const key=levelKey(),lvl=key?g.levels[key]:null,title=document.createElement('strong');
- title.textContent=!lvl?'Gene-set AUROC (relative)':aucMode()?lvl.title+' specificity AUROC':lvl.title+' (specificity AUROC)';legendEl.append(title);
- if(!lvl){if(R.limits(scores))scaleBar(['≤ '+pct(CLIP)+' percentile',null,'midpoint',null,'≥ '+pct(1-CLIP)+' percentile'],
+ title.textContent=!lvl?(absolute?'Gene-set AUROC':'Gene-set AUROC (relative)'):aucMode()?lvl.title+' specificity AUROC':lvl.title+' (specificity AUROC)';legendEl.append(title);
+ if(!lvl){if(R.limits(scores)&&absolute)scaleBar(valueTicks(),clipNote()+' Hover for the exact AUROC.');
+  else if(R.limits(scores))scaleBar(['≤ '+pct(CLIP)+' percentile',null,'midpoint',null,'≥ '+pct(1-CLIP)+' percentile'],
   'Arbitrary units: each slice is scaled between its own '+pct(CLIP)+' and '+pct(1-CLIP)+' percentiles, shown above each panel. Hover for the exact AUROC.');else{const note=document.createElement('div');note.className='note';note.textContent='Not scored yet';legendEl.append(note);}return;}
  const aucs=levelAucs(),hasAucs=lvl.labels.some(l=>Number.isFinite(aucs[l]));
- if(aucMode()){if(hasAucs)scaleBar(valueTicks(),'Clipped at the '+pct(CLIP)+' and '+pct(1-CLIP)+' percentiles of the cells shown.');else{const note=document.createElement('div');note.className='note';note.textContent='Enter a valid gene set to see specificity AUROCs.';legendEl.append(note);}}
+ if(aucMode()){if(hasAucs)scaleBar(valueTicks(),clipNote());else{const note=document.createElement('div');note.className='note';note.textContent='Enter a valid gene set to see specificity AUROCs.';legendEl.append(note);}}
  let order=lvl.labels.map((_,i)=>i);
  if(aucMode()&&hasAucs)order.sort((a,b)=>(aucs[lvl.labels[b]]??-1)-(aucs[lvl.labels[a]]??-1));
  const note=document.createElement('div');note.className='note';note.textContent='Click an entry to highlight it.';legendEl.append(note);
@@ -97,7 +109,7 @@ function legend(){
   sw.style.background=aucMode()?(Number.isFinite(aucs[label])?'#'+[0,8,16].map(s=>((shade(aucs[label])>>s)&255).toString(16).padStart(2,'0')).join(''):'#D4DCE4'):lvl.colors[i];
   const value=Number.isFinite(aucs[label])?aucs[label].toFixed(2):'—';
   const text=document.createElement('span');text.textContent=label+' ('+value+')';
-  row.title=(lvl.descriptions[i]?lvl.descriptions[i]+'\n':'')+lvl.counts[i].toLocaleString()+' cells shown';
+  row.title=(lvl.descriptions[i]?lvl.descriptions[i]+'\n':'')+lvl.counts[i].toLocaleString()+' '+items()+' shown';
   row.onclick=()=>{highlight=highlight===label?null:label;dirty=true;schedule();};
   row.append(sw,text);legendEl.append(row);}
 }
@@ -108,9 +120,14 @@ function draw(){
  const W=Math.round(w*dpr),H=Math.round(h*dpr);if(!img||img.width!==W||img.height!==H)img=new ImageData(W,H);
  const buf=new Uint32Array(img.data.buffer);buf.fill(BLACK);
  const k=g.step*scale*dpr,ox=panX*dpr,oy=panY*dpr,size=Math.max(Math.round(dpr),Math.round(g.dot*scale*dpr)),spans=R.disc(size),half=size/2;
+ // Squares (bins) run edge to edge, so neighbours meet; from 5 px a one-pixel black line separates them, so edges stay
+ // hard at the fitted view (below 5 px the gap would black out over a third of each square).
+ const side=g.dot*scale*dpr,gap=side>=5?1:0;
  // Unscored or non-highlighted cells first, so coloured cells stay on top. Within a pass the
  // order is the server's random drawing order, so overlaps favour no slice or annotation.
  for(let pass=0;pass<2;pass++)for(let i=0;i<g.n;i++){if(front[i]!==pass)continue;
+  if(g.marker==='square'){const cx=g.px[i]*k+ox,cy=g.py[i]*k+oy,x=Math.round(cx-side/2),y=Math.round(cy-side/2);
+   R.stamp(buf,W,H,x,y,R.square(Math.max(1,Math.round(cx+side/2)-x-gap),Math.max(1,Math.round(cy+side/2)-y-gap)),colors[i]);continue;}
   const x=Math.round(g.px[i]*k+ox-half),y=Math.round(g.py[i]*k+oy-half);if(x>=W||y>=H||x+size<=0||y+size<=0)continue;
   if(size===1)buf[y*W+x]=colors[i];else R.stamp(buf,W,H,x,y,spans,colors[i]);}
  if(canvas.width!==W)canvas.width=W;if(canvas.height!==H)canvas.height=H;
@@ -118,14 +135,15 @@ function draw(){
  for(const [slot,p] of g.panels.entries()){const x=p.x*scale+panX+6,y=p.y*scale+panY+4;if(x>w||y>h||x+p.w*scale<0||y+p.h*scale<0)continue;
   ctx.font='600 13px Arial,sans-serif';ctx.fillStyle='#E8ECF1';ctx.fillText(p.label,x,y);let used=ctx.measureText(p.label).width+7;
   // In gene-set mode the slice's colour range comes first, then the cell count if it fits.
-  const r=ranges&&ranges[slot],extras=[r?r[0].toFixed(3)+'–'+r[1].toFixed(3):null,p.n.toLocaleString()+' cells'];
+  const r=ranges&&ranges[slot],extras=[r?r[0].toFixed(3)+'–'+r[1].toFixed(3):null,p.n.toLocaleString()+' '+items()];
   ctx.font='11px Arial,sans-serif';
   for(const [j,text] of extras.entries()){if(!text)continue;const tw=ctx.measureText(text).width;if(used+tw+8>p.w*scale)break;
    ctx.fillStyle=j===0?'#F3DD65':'#9AA5B1';ctx.fillText(text,x+used,y+1.5);used+=tw+8;}}
  ctx.setTransform(1,0,0,1,0,0);
  if(!shot||shot.canvas.width!==W||shot.canvas.height!==H){const c=document.createElement('canvas');c.width=W;c.height=H;shot={canvas:c};}
  shot.canvas.getContext('2d').drawImage(canvas,0,0);shot.scale=scale;shot.panX=panX;shot.panY=panY;
- document.getElementById('status').textContent=g.n.toLocaleString()+' cells in '+g.panels.length+' '+(g.noun||'slices')+' · dot ≈ '+(g.dot*(g.um_per_unit??.5)).toFixed(0)+' µm (median cell spacing)';
+ const um=(g.dot*(g.um_per_unit??.5)).toFixed(0);
+ document.getElementById('status').textContent=g.n.toLocaleString()+' '+items()+' in '+g.panels.length+' '+(g.noun||'slices')+' · '+(g.marker==='square'?um+' µm squares':'dot ≈ '+um+' µm ('+(g.dot_scale&&g.dot_scale!==1?Math.round(Math.abs(g.dot_scale-1)*100)+'% '+(g.dot_scale>1?'over':'under')+' the ':'')+'median cell spacing)');
  console.debug('[timing] browser_draw_ms='+(performance.now()-started).toFixed(1)+' dot_px='+size);
 }
 function fitScale(){return Math.min(area.clientWidth/g.width,area.clientHeight/g.height)*.98;}
@@ -133,7 +151,8 @@ function reset(){if(!g)return;const w=area.clientWidth,h=area.clientHeight;scale
 function fit(){if(!g)return;const w=Math.max(200,(document.documentElement.clientWidth||window.innerWidth)-LEGEND);
  const h=Math.round(Math.max(MIN_HEIGHT,Math.min(900,w*g.height/g.width)));if(h!==plotHeight){plotHeight=h;wrap.style.height=h+'px';send('streamlit:setFrameHeight',{height:h+40});}}
 function load(geo){
- g={...geo};g.px=decode(geo.px,Uint16Array);g.py=decode(geo.py,Uint16Array);g.slice=decode(geo.slice,Uint8Array);
+ const P=geo.positions==='<f4'?Float32Array:Uint16Array;  // squares (bins) keep exact float positions
+ g={...geo};g.px=decode(geo.px,P);g.py=decode(geo.py,P);g.slice=decode(geo.slice,Uint8Array);
  for(const lvl of Object.values(g.levels)){lvl.codes=decode(lvl.codes,lvl.dtype==='<u1'?Uint8Array:Uint16Array);lvl.counts=new Uint32Array(lvl.labels.length);for(const c of lvl.codes)lvl.counts[c]++;}
  scores=new Float64Array(g.n).fill(NaN);index=R.buildIndex(g.px,g.py,g.step,g.width,g.height,Math.max(g.dot*4,g.width/600));
  highlight=null;dirty=true;fit();reset();
@@ -175,8 +194,8 @@ window.addEventListener('message',event=>{if(event.source!==parent||event.data.t
  let changed=false;
  if(seq!==p.seq){if(p.reset)scores.fill(NaN);const ids=decode(p.indices,Uint32Array),values=decode(p.values,Float64Array);
   for(let j=0;j<ids.length;j++)scores[ids[j]]=values[j];seq=p.seq;dirty=true;changed=true;}
- const next=JSON.stringify([args.mode,args.cell_level,args.region_level,args.cell_aurocs,args.region_aurocs,args.clip]);
- if(next!==signature){if(Number.isFinite(args.clip))CLIP=args.clip;const before=levelKey();mode=args.mode;cellLevel=args.cell_level;regionLevel=args.region_level;
+ const next=JSON.stringify([args.mode,args.cell_level,args.region_level,args.cell_aurocs,args.region_aurocs,args.clip,args.absolute]);
+ if(next!==signature){if(Number.isFinite(args.clip))CLIP=args.clip;absolute=!!args.absolute;const before=levelKey();mode=args.mode;cellLevel=args.cell_level;regionLevel=args.region_level;
   cellAucs=args.cell_aurocs||{};regionAucs=args.region_aurocs||{};if(levelKey()!==before)highlight=null;signature=next;dirty=true;}
  // A table row click from the server: applied once per request, after any mode change above.
  const request=args.highlight;if(request&&request.seq!==highlightSeq){highlightSeq=request.seq;highlight=request.label??null;dirty=true;}

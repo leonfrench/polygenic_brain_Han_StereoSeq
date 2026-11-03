@@ -23,6 +23,8 @@ function groupLimits(values,groups,n,q=.05){const count=new Int32Array(n),fill=n
 // Rows of a filled disc of the given pixel diameter: [dy, x0, x1) offsets from the top-left corner.
 function disc(size){const spans=[];if(size<=3){for(let y=0;y<size;y++)spans.push([y,0,size]);return spans;}
  const r=size/2;for(let y=0;y<size;y++){const dy=y+.5-r,half=Math.sqrt(Math.max(0,r*r-dy*dy));const x0=Math.round(r-half),x1=Math.round(r+half);if(x1>x0)spans.push([y,x0,x1]);}return spans;}
+// Rows of a filled w x h rectangle (a bin's square), in the same span format.
+function square(w,h){const spans=[];for(let y=0;y<h;y++)spans.push([y,0,w]);return spans;}
 function stamp(buf,W,H,x,y,spans,color){for(const [dy,a,b] of spans){const yy=y+dy;if(yy<0||yy>=H)continue;const lo=Math.max(0,x+a),hi=Math.min(W,x+b);if(hi>lo)buf.fill(color,yy*W+lo,yy*W+hi);}}
 // Uniform bucket index over display coordinates for nearest-cell hover lookup.
 function buildIndex(px,py,step,width,height,bucket){const bw=Math.max(1,Math.ceil(width/bucket)),bh=Math.max(1,Math.ceil(height/bucket)),n=px.length;
@@ -53,6 +55,6 @@ function hoverKeys(levels,keys,extra){let out=keys.filter(k=>levels[k]);
 function hoverLines(levels,keys,i,slice,sliceWith,brackets={}){return keys.map(k=>{const lvl=levels[k],c=lvl.codes[i],label=lvl.labels[c],d=lvl.descriptions[c];
  const named=d&&d!==label,inner=levels[brackets[k]],code=inner?inner.labels[inner.codes[i]]:named?label:'';
  const text=lvl.title+': '+(named?d:label)+(code?' ('+code+')':'');return k===sliceWith?text+' · slice: '+slice:text;});}
-root.CellRender={rgb,pack,gradient,limits,clippedLimits,groupLimits,disc,stamp,buildIndex,nearest,precision,wheelScale,hoverKeys,hoverLines,STOPS};
+root.CellRender={rgb,pack,gradient,limits,clippedLimits,groupLimits,disc,square,stamp,buildIndex,nearest,precision,wheelScale,hoverKeys,hoverLines,STOPS};
 if(typeof module!=='undefined')module.exports=root.CellRender;
 })(globalThis);
