@@ -37,6 +37,10 @@ function nearest(index,px,py,x,y,radius){const {bw,bh,bucket,start,items,step}=i
   for(let j=start[k];j<start[k+1];j++){const i=items[j],dx=px[i]*step-x,dy=py[i]*step-y,d=dx*dx+dy*dy;if(d<bestD||(d===bestD&&i<best)){bestD=d;best=i;}}}
  return best;}
 function precision(low,high){return Math.min(8,Math.max(3,Math.ceil(-Math.log10((high-low)/4||1e-3))+1));}
+// Wheel zoom: the next scale, up to max, or exactly fit when it reaches the fitted view (within rounding);
+// null when the plot is already fully zoomed out and the wheel turns that way, so the event can scroll the page.
+function wheelScale(scale,deltaY,fit,max){const near=fit*(1+1e-9);if(deltaY>0&&scale<=near)return null;
+ const next=scale*Math.exp(-deltaY*.002);return next<=near?fit:Math.min(max,next);}
 // Hover levels: the configured keys that exist, plus each extra key (the sidebar's levels) not already
 // listed, placed before the first listed level of the same kind, so a coarser class or division comes first.
 function hoverKeys(levels,keys,extra){let out=keys.filter(k=>levels[k]);
@@ -49,6 +53,6 @@ function hoverKeys(levels,keys,extra){let out=keys.filter(k=>levels[k]);
 function hoverLines(levels,keys,i,slice,sliceWith,brackets={}){return keys.map(k=>{const lvl=levels[k],c=lvl.codes[i],label=lvl.labels[c],d=lvl.descriptions[c];
  const named=d&&d!==label,inner=levels[brackets[k]],code=inner?inner.labels[inner.codes[i]]:named?label:'';
  const text=lvl.title+': '+(named?d:label)+(code?' ('+code+')':'');return k===sliceWith?text+' · slice: '+slice:text;});}
-root.CellRender={rgb,pack,gradient,limits,clippedLimits,groupLimits,disc,stamp,buildIndex,nearest,precision,hoverKeys,hoverLines,STOPS};
+root.CellRender={rgb,pack,gradient,limits,clippedLimits,groupLimits,disc,stamp,buildIndex,nearest,precision,wheelScale,hoverKeys,hoverLines,STOPS};
 if(typeof module!=='undefined')module.exports=root.CellRender;
 })(globalThis);

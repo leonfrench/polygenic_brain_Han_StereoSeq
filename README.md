@@ -57,7 +57,8 @@ dataset.
   label) share one scale clipped at the 1st and 99th percentiles of the cells shown. The clip is `COLOUR_CLIP` in `app.py`. Colours only; the statistics
   are unchanged. Drag to
   pan, scroll to zoom, double-click to reset, click a legend entry to highlight that label, and save the current
-  view as PNG. Hover shows a cell's gene-set AUROC, then its subclass (cluster in brackets), its brain area (name,
+  view as PNG. Zooming out stops at the fitted view; from there the wheel scrolls the page (a pinch or ctrl+wheel
+  never zooms the page). Hover shows a cell's gene-set AUROC, then its subclass (cluster in brackets), its brain area (name,
   then acronym in brackets) with the slice, and its finest region; the class or division is added when that level is
   chosen in the sidebar.
 - **Tables**: cell type and region expression specificity across all slices, with CSV downloads, plus

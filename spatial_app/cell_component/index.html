@@ -128,7 +128,8 @@ function draw(){
  document.getElementById('status').textContent=g.n.toLocaleString()+' cells in '+g.panels.length+' '+(g.noun||'slices')+' · dot ≈ '+(g.dot*(g.um_per_unit??.5)).toFixed(0)+' µm (median cell spacing)';
  console.debug('[timing] browser_draw_ms='+(performance.now()-started).toFixed(1)+' dot_px='+size);
 }
-function reset(){if(!g)return;const w=area.clientWidth,h=area.clientHeight;scale=Math.min(w/g.width,h/g.height)*.98;panX=(w-g.width*scale)/2;panY=(h-g.height*scale)/2;moved=false;tip.style.display='none';schedule();}
+function fitScale(){return Math.min(area.clientWidth/g.width,area.clientHeight/g.height)*.98;}
+function reset(){if(!g)return;const w=area.clientWidth,h=area.clientHeight;scale=fitScale();panX=(w-g.width*scale)/2;panY=(h-g.height*scale)/2;moved=false;tip.style.display='none';schedule();}
 function fit(){if(!g)return;const w=Math.max(200,(document.documentElement.clientWidth||window.innerWidth)-LEGEND);
  const h=Math.round(Math.max(MIN_HEIGHT,Math.min(900,w*g.height/g.width)));if(h!==plotHeight){plotHeight=h;wrap.style.height=h+'px';send('streamlit:setFrameHeight',{height:h+40});}}
 function load(geo){
@@ -159,8 +160,11 @@ canvas.addEventListener('pointermove',e=>{if(!g)return;const r=canvas.getBoundin
  tip.textContent=hoverText(i);tip.style.display='block';
  tip.style.left=Math.max(0,Math.min(sx+14,area.clientWidth-tip.offsetWidth-4))+'px';tip.style.top=Math.max(0,Math.min(sy+14,area.clientHeight-tip.offsetHeight-4))+'px';});
 canvas.addEventListener('pointerleave',()=>tip.style.display='none');
-canvas.addEventListener('wheel',e=>{e.preventDefault();if(!g)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,
- fitScale=Math.min(area.clientWidth/g.width,area.clientHeight/g.height),next=Math.max(fitScale*.5,Math.min(200/g.dot,scale*Math.exp(-e.deltaY*.002))),ratio=next/scale;
+// Zooming out stops at the fitted (reset) view; from there the wheel scrolls the page down to the tables.
+// A pinch or ctrl+wheel (ctrlKey) is still never passed on, so it cannot zoom the whole page.
+canvas.addEventListener('wheel',e=>{if(!g)return;const fit=fitScale(),next=R.wheelScale(scale,e.deltaY,fit,200/g.dot);
+ if(next===null&&!e.ctrlKey)return;e.preventDefault();if(next===null)return;if(next===fit){reset();return;}
+ const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,ratio=next/scale;
  panX=x+(panX-x)*ratio;panY=y+(panY-y)*ratio;scale=next;moved=true;tip.style.display='none';preview();},{passive:false});
 canvas.addEventListener('dblclick',reset);document.getElementById('reset').onclick=reset;
 clearButton.onclick=()=>{highlight=null;dirty=true;schedule();};

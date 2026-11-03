@@ -35,4 +35,10 @@ assert.deepEqual(R.hoverLines(lv,['cell_subclass','region_structure','region_are
 // A bracketed level (the cluster) sits in its parent's brackets; region names keep their acronyms.
 assert.deepEqual(R.hoverLines(lv,['cell_subclass','region_structure'],0,'T319',null,{cell_subclass:'cell_cluster'}),
  ['Cell subclass: 333 Endo NN (MGL_289)','Brain structure: Entorhinal area, lateral part (ENTl)']);
-console.log('Cell viewer colour, disc, clipping, nearest-cell and hover tests passed');
+// Wheel zoom stops at the fitted view; a fully zoomed-out plot passes the wheel on (null) so the page scrolls.
+assert.equal(R.wheelScale(1,100,1,8),null);assert.equal(R.wheelScale(.9,100,1,8),null);assert.equal(R.wheelScale(1+1e-12,100,1,8),null);
+assert.equal(R.wheelScale(1.1,500,1,8),1);assert.equal(R.wheelScale(Math.exp(.2)*(1+1e-12),100,1,8),1);// rounding snaps to the fit
+assert.equal(R.wheelScale(.5,100,1,8),null);assert.equal(R.wheelScale(.5,-100,1,8),1);// below the fit (after a resize): wheel up returns to it
+assert.equal(R.wheelScale(7.9,-500,1,8),8);assert.equal(R.wheelScale(2,0,1,8),2);
+assert(Math.abs(R.wheelScale(1,-100,1,8)-Math.exp(.2))<1e-12&&Math.abs(R.wheelScale(4,100,1,8)-4*Math.exp(-.2))<1e-12);
+console.log('Cell viewer colour, disc, clipping, nearest-cell, hover and zoom tests passed');
