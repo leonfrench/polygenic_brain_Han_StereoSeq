@@ -340,7 +340,8 @@ def render_bins():
         cell_chart(bins, values, slices=[s['id'] for s in bin_manifest['slices']], annotations=levels,
                    version=f"{BINS}:{bin_manifest['created_utc']}", mode=mode, cell_level=cell_level, region_level=region_level,
                    cell_aurocs={}, region_aurocs={}, clip=0, filename=f"{manifest['dataset']}-bins-spatial", hover=BIN_HOVER,
-                   absolute=True, items='bins', marker='square')
+                   absolute=True, items='bins', marker='square',
+                   pixelated=True)  # nearest-neighbour canvas scaling keeps the small squares' edges hard
         st.caption(f"Each square is a {bin_manifest['bin_um']:g} µm bin of one lattice shared by all slices, the pseudobulk of the cells whose centroid "
                    'lies in it; its gene-set AUROC ranks genes within the bin, as for single cells. '
                    f'Grey bins are not scored: they have fewer than {MIN_BIN_CELLS} cells, or no gene set has been scored yet. '

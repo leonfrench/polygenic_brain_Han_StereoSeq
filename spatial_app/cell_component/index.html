@@ -199,6 +199,8 @@ window.addEventListener('message',event=>{if(event.source!==parent||event.data.t
   cellAucs=args.cell_aurocs||{};regionAucs=args.region_aurocs||{};if(levelKey()!==before)highlight=null;signature=next;dirty=true;}
  // A table row click from the server: applied once per request, after any mode change above.
  const request=args.highlight;if(request&&request.seq!==highlightSeq){highlightSeq=request.seq;highlight=request.label??null;dirty=true;}
+ // Nearest-neighbour scaling when asked: where the browser resamples the canvas, square edges stay hard.
+ canvas.style.imageRendering=args.pixelated?'pixelated':'';
  filename=args.filename;hover=args.hover||null;if(dirty)schedule();if(changed)send('streamlit:setComponentValue',{value:{client,version,seq}});
 });
 window.addEventListener('resize',fit);

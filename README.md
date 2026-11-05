@@ -182,7 +182,8 @@ only those are committed in `data/mouse1-bins178um/` (185 MB), with the manifest
 
 When the bins were built from the app's cell dataset, **Colour cells by** gains *178µm bin AUROC*: the plot shows the
 bins instead of the cells, each with a gene-set AUROC from its within-bin ranks, on one absolute scale for all slices from the lowest
-to the highest bin, without clipping. Bins with fewer than 20 cells are grey and not scored. The tooltip gives the bin's cells and
+to the highest bin, without clipping. Bins with fewer than 20 cells are grey and not scored. The canvas is scaled by nearest neighbour
+(`image-rendering: pixelated`), so the small squares' edges stay hard under display scaling or browser zoom. The tooltip gives the bin's cells and
 grid position and the most common subclass and area of its cells, plus the sidebar's cell type and region levels when they differ
 (each first within its kind, so a cluster comes before the subclass). Bin scores read one slice's ranks at a time. If scoring fails,
 the page shows a reference that matches the error in the server log. The tables are unchanged. `MOUSE_APP_BINS=/path/to/bins`
