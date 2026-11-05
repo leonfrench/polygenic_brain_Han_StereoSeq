@@ -116,6 +116,7 @@ def test_delayed_ack_sends_only_new_scores_and_remount_recovers(monkeypatch):
     assert sent[-1]['cell_aurocs'] == {'A': .6} and sent[-1]['hover'] is None  # the default tooltip
     assert sent[-1]['absolute'] is False  # gene-set colours are relative per slice unless asked
     assert sent[-1]['pixelated'] is False  # the browser's smooth canvas scaling unless asked
+    assert sent[-1]['max_height'] is None  # the viewer's own 900 px cap unless asked
     first = sent[-1]['packet']['seq']
     chart.cell_chart(cells, np.array([.1, .2, np.nan, np.nan]), **args)
     session['cell_plot'] = dict(client='browser', version='slices-1', seq=first)
@@ -136,3 +137,5 @@ def test_delayed_ack_sends_only_new_scores_and_remount_recovers(monkeypatch):
     assert sent[-1]['absolute'] is True
     chart.cell_chart(cells, np.array([.1, .2, .3, np.nan]), **args, pixelated=True)
     assert sent[-1]['pixelated'] is True
+    chart.cell_chart(cells, np.array([.1, .2, .3, np.nan]), **args, max_height=440)
+    assert sent[-1]['max_height'] == 440

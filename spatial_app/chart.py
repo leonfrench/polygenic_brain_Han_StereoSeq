@@ -62,14 +62,16 @@ def score_patch(previous, scores):
 
 
 @st.cache_resource(max_entries=2, show_spinner=False)
-def shared_geometry(version, _cells, slices, _annotations, um_per_unit, noun, items='cells', marker='dot', dot_scale=1.0):
+def shared_geometry(version, _cells, slices, _annotations, um_per_unit, noun, items='cells', marker='dot', dot_scale=1.0, columns=None):
     """One geometry payload per data version, shared by every session instead of rebuilt and held by each."""
-    return geometry_payload(_cells, list(slices), _annotations, um_per_unit=um_per_unit, noun=noun, items=items, marker=marker, dot_scale=dot_scale)
+    return geometry_payload(_cells, list(slices), _annotations, columns=columns, um_per_unit=um_per_unit, noun=noun, items=items, marker=marker,
+                            dot_scale=dot_scale)
 
 
 def cell_chart(cells, scores, *, slices, annotations, version, mode, cell_level, region_level,
                cell_aurocs, region_aurocs, filename, highlight=None, clip=0.01, um_per_unit=0.5, noun='slices',
-               hover=None, absolute=False, items='cells', marker='dot', dot_scale=1.0, pixelated=False, key='cell_plot'):
+               hover=None, absolute=False, items='cells', marker='dot', dot_scale=1.0, pixelated=False, columns=None, max_height=None,
+               key='cell_plot'):
     """Cells must already be in drawing order; scores align with those rows.
 
     highlight is an optional {label, seq} request; the viewer applies each new seq once,
@@ -85,13 +87,18 @@ def cell_chart(cells, scores, *, slices, annotations, version, mode, cell_level,
     the two chosen levels and the slice's colour range. items and marker are as for geometry_payload.
     pixelated has the browser scale the plot canvas by nearest neighbour (CSS image-rendering: pixelated),
     so square edges stay hard where the canvas is resampled (display scaling or browser zoom).
+    columns is the number of panels per row (slice_grid's rows of four or eight when None). The
+    viewer's height follows the grid's height-to-width ratio, between 440 and 900 px; max_height
+    lowers the 900 (not below 440), and a grid that would be taller is scaled down to fit, with
+    space left at the sides.
     """
     started = time.perf_counter()
     state_key = key + '_transport'
     ack = st.session_state.get(key) or {}
     state = st.session_state.get(state_key)
     if state is None or state['version'] != version or 'history' not in state:
-        state = dict(version=version, geometry=shared_geometry(version, cells, tuple(slices), annotations, um_per_unit, noun, items, marker, dot_scale), seq=0,
+        state = dict(version=version, geometry=shared_geometry(version, cells, tuple(slices), annotations, um_per_unit, noun, items, marker, dot_scale,
+                                                              columns), seq=0,
                      pending=None, baseline=None, client=None, history={})
         st.session_state[state_key] = state
     client = ack.get('client')
@@ -121,6 +128,6 @@ def cell_chart(cells, scores, *, slices, annotations, version, mode, cell_level,
     _component(geometry=geometry, packet=packet, mode=mode, cell_level=cell_level, region_level=region_level,
                cell_aurocs=finite(cell_aurocs), region_aurocs=finite(region_aurocs),
                highlight=highlight, clip=clip, filename=filename, hover=hover, absolute=bool(absolute), pixelated=bool(pixelated),
-               key=key, default=None)
+               max_height=max_height, key=key, default=None)
     print(f"[timing] chart={filename} compact_update_s={time.perf_counter()-started:.3f} "
           f"payload_mib={payload_bytes/1024**2:.3f} geometry_sent={geometry is not None}", flush=True)

@@ -3,6 +3,7 @@ from functools import partial
 from itertools import zip_longest
 from pathlib import Path
 import json
+import math
 import os
 import time
 import uuid
@@ -28,6 +29,7 @@ CELL_LEVELS = ('cell_class', 'cell_subclass', 'cell_cluster')
 REGION_LEVELS = ('region_division', 'region_area', 'region')
 PARENT = {'cell_cluster': 'cell_subclass', 'cell_subclass': 'cell_class'}
 COLOUR_CLIP = 0.01  # colour scales span the 1st to 99th percentiles
+PLOT_MAX_HEIGHT = 440  # px: the viewer's minimum, so the plot is this tall on every screen
 GENE_COLUMNS = ('symbol', 'mgi_id', 'name', 'n_cells_detected')  # in the genes-used download
 # Tooltip levels (the chosen class or division is added when selected); the cluster goes in the subclass's brackets
 # and the slice on the area line.
@@ -155,6 +157,10 @@ if st.session_state.get('dataset_version') != version:
     reset_scores()
 
 selected = slice_ids  # every processed slice is shown, anterior to posterior
+# Three rows (six, six and four for the 16 slices; at least four per row, as slice_grid does for up to 12), no taller than
+# PLOT_MAX_HEIGHT: on most screens the slices are a third wider than in two rows of eight at the same height; on very wide
+# screens the cap stops the plot growing taller, and the slices stop growing.
+panel_columns = max(4, math.ceil(len(selected)/3))
 
 with st.sidebar:
     species_label, species_selector = st.columns([1.8, 1.4], gap='small', vertical_alignment='center')
@@ -340,7 +346,7 @@ def render_bins():
         cell_chart(bins, values, slices=[s['id'] for s in bin_manifest['slices']], annotations=levels,
                    version=f"{BINS}:{bin_manifest['created_utc']}", mode=mode, cell_level=cell_level, region_level=region_level,
                    cell_aurocs={}, region_aurocs={}, clip=0, filename=f"{manifest['dataset']}-bins-spatial", hover=BIN_HOVER,
-                   absolute=True, items='bins', marker='square',
+                   absolute=True, items='bins', marker='square', columns=panel_columns, max_height=PLOT_MAX_HEIGHT,
                    pixelated=True)  # nearest-neighbour canvas scaling keeps the small squares' edges hard
         st.caption(f"Each square is a {bin_manifest['bin_um']:g} µm bin of one lattice shared by all slices, the pseudobulk of the cells whose centroid "
                    'lies in it; its gene-set AUROC ranks genes within the bin, as for single cells. '
@@ -361,7 +367,7 @@ def render_chart(cell_table, region_table):
         cell_chart(view, scores, slices=selected, annotations=annotations, version=chart_version, mode=mode,
                    cell_level=cell_level, region_level=region_level, cell_aurocs=aucs(cell_table), region_aurocs=aucs(region_table),
                    highlight=st.session_state.get('highlight_request'), clip=COLOUR_CLIP, filename=f"{manifest['dataset']}-spatial",
-                   hover=HOVER)
+                   hover=HOVER, columns=panel_columns, max_height=PLOT_MAX_HEIGHT)
         st.caption('Each dot is one segmented cell at its registered position; every panel uses the same frame and scale. '
                    f'Grey cells are not scored yet. Gene-set AUROC colours are relative within each slice ({low} to {high} percentile, range shown above each panel), '
                    f'because AUROC ranges differ between slices; label AUROC modes share one scale clipped at the {low} and {high} percentiles. '

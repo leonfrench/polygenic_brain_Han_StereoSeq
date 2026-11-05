@@ -29,6 +29,11 @@ def finish(app, manifest):
     raise AssertionError('scoring did not finish')
 
 
+def viewer_args(app):
+    """The arguments the app last sent to the cell viewer."""
+    return json.loads(app.get('component_instance')[0].proto.json_args)
+
+
 def test_all_slices_score_progressively_and_fill_both_tables(manifest):
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=120).run()
     assert not app.exception
@@ -68,6 +73,9 @@ def test_all_slices_are_always_shown_and_levels_change_tables(manifest):
     assert not app.multiselect  # no slice selector
     header = next(m.value for m in app.markdown if 'coronal slices' in m.value)
     assert header == f"**Mouse 1 · {len(manifest['slices'])} coronal slices**"  # the panels carry the slice IDs
+    panels = app.session_state['cell_plot_transport']['geometry']['panels']
+    assert len({p['y'] for p in panels}) == 3 and len({p['x'] for p in panels}) == 6  # three rows of six (the last has four)
+    assert viewer_args(app)['max_height'] == 440  # no taller than the viewer's minimum
     finish(app, manifest)
     app.selectbox(key='cell_level').set_value('cell_cluster').run()
     app.selectbox(key='region_level').set_value('region').run()
@@ -103,6 +111,8 @@ def test_bins_are_one_more_colour_mode_and_rescored_for_a_new_gene_set():
     assert len(values) == bins['n_bins'] and np.array_equal(np.isfinite(values), n_cells >= MIN_BIN_CELLS)
     assert ((values[np.isfinite(values)] >= 0) & (values[np.isfinite(values)] <= 1)).all()
     assert any(c.value.startswith(f"Each square is a {bins['bin_um']:g} µm bin") for c in app.caption)
+    geometry = app.session_state['cell_plot_transport']['geometry']
+    assert len({p['y'] for p in geometry['panels']}) == 3 and viewer_args(app)['max_height'] == 440  # as for the cells
     app.text_area(key='target_input').set_value('Gfap Aqp4 Aldh1l1').run()
     assert not app.exception and app.radio(key='colour_mode').value == 'Gene-set AUROC'  # a new gene set starts on the cells
     assert any(c.value.startswith('Each dot is one segmented cell') for c in app.caption)

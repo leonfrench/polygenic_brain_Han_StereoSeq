@@ -2,7 +2,7 @@
 
 A Streamlit app for the Stereo-seq whole mouse brain atlas of Han et al. (2025; mouse 1, whole transcriptome). Enter a
 gene set; every segmented cell gets an exact set-versus-complement AUROC from its gene expression ranks, shown on 16
-coronal slices in two rows of eight, anterior to posterior. The app also tests whether the gene set is specifically
+coronal slices in three rows, anterior to posterior. The app also tests whether the gene set is specifically
 expressed in each **cell type** and each **brain region**, using pseudobulk profiles as in the
 [SEA-AD polygenic tester](https://github.com/leonfrench/SEA_AD_multi_polygenic_app). It is a cell-based relative of the
 [spatial fetal app](https://github.com/leonfrench/spatial_fetal_app). A
@@ -38,8 +38,8 @@ dataset.
 
 ## Using the app
 
-- **Slices**: every processed slice is shown, anterior to posterior (rows of four for up to 12 slices, rows of
-  eight beyond). Batches from all slices are scored in interleaved order, so all panels fill in together. To
+- **Slices**: every processed slice is shown, anterior to posterior (rows of four for up to 12 slices, three rows
+  beyond). Batches from all slices are scored in interleaved order, so all panels fill in together. To
   change slices, reprocess with a different set of files.
 - **Genes**: mouse symbols by default (matched case-insensitively). Human or rhesus macaque symbols are
   converted to mouse orthologs with the bundled HomoloGene snapshot (`data/homologene_to_human.csv.gz`);
@@ -51,18 +51,18 @@ dataset.
   colour each cell by its label's specificity AUROC from the tables). The cell type level
   (class / subclass / cluster) and region level (division / area / finest) set both the colours and the tables.
   A fourth option, before cell type and region, shows the gene-set AUROC of [square bins of cells](#binned-view) instead of the cells.
-- **Plot**: one panel per slice, all sharing the same registered frame and scale, so slices keep their
-  registered position and relative size, on a black background. Dots are sized to the median nearest-cell
-  spacing (~14 µm). AUROC ranges differ between slices (batch effects), so gene-set AUROC colours are relative
-  within each slice: each slice is scaled between its own 1st and 99th percentiles, which are shown above its panel,
-  and the legend is in arbitrary units. Hover gives the exact AUROC. The label AUROC modes (one pooled value per
-  label) share one scale clipped at the 1st and 99th percentiles of the cells shown. The clip is `COLOUR_CLIP` in `app.py`. Colours only; the statistics
-  are unchanged. Drag to
-  pan, scroll to zoom, double-click to reset, click a legend entry to highlight that label, and save the current
-  view as PNG. Zooming out stops at the fitted view; from there the wheel scrolls the page (a pinch or ctrl+wheel
-  never zooms the page). Hover shows a cell's gene-set AUROC, then its subclass (cluster in brackets), its brain area (name,
-  then acronym in brackets) with the slice, and its finest region; the class or division is added when that level is
-  chosen in the sidebar.
+- **Plot**: one panel per slice, all sharing the same registered frame and scale, so slices keep their registered
+  position and relative size, on a black background. The plot is always 440 px tall (`PLOT_MAX_HEIGHT` in `app.py`);
+  on screens so wide that three rows would need more, the slices stop growing instead. Dots are sized to the median
+  nearest-cell spacing (~14 µm). AUROC ranges differ between slices (batch effects), so gene-set AUROC colours are
+  relative within each slice: each slice is scaled between its own 1st and 99th percentiles, which are shown above
+  its panel, and the legend is in arbitrary units. Hover gives the exact AUROC. The label AUROC modes (one pooled
+  value per label) share one scale clipped at the 1st and 99th percentiles of the cells shown. The clip is
+  `COLOUR_CLIP` in `app.py`. Colours only; the statistics are unchanged. Drag to pan, scroll to zoom, double-click
+  to reset, click a legend entry to highlight that label, and save the current view as PNG. Zooming out stops at the
+  fitted view; from there the wheel scrolls the page (a pinch or ctrl+wheel never zooms the page). Hover shows a
+  cell's gene-set AUROC, then its subclass (cluster in brackets), its brain area (name, then acronym in brackets)
+  with the slice, and its finest region; the class or division is added when that level is chosen in the sidebar.
 - **Tables**: cell type and region expression specificity across all slices, with CSV downloads, plus
   a download of every cell's score once scoring completes. The tables use pseudobulk profiles, not
   cell scores, so they appear as soon as the gene set is valid. Tick a row's checkbox to colour the plot by that

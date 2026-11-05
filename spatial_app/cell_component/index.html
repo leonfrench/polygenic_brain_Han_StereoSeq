@@ -32,6 +32,8 @@ function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]
 function pct(q){return ordinal(Math.round(q*100));}
 // Tall enough for the colour-scale legend (title, four-line note and bar) without scrolling.
 const MIN_HEIGHT=440;
+// The plot height follows the grid's shape up to this; the server may lower it (max_height), never below MIN_HEIGHT.
+const MAX_HEIGHT=900;let maxHeight=MAX_HEIGHT;
 let g=null,scores=null,version=null,seq=-1,mode='Gene-set AUROC',cellLevel='cell_subclass',regionLevel='region_area',
  cellAucs={},regionAucs={},filename='cells',colors=null,front=null,low=0,high=1,highlight=null,dirty=true,frame=null,
  scale=1,panX=0,panY=0,moved=false,img=null,index=null,plotHeight=0,signature='',ranges=null,highlightSeq=null,hover=null,absolute=false;
@@ -149,7 +151,7 @@ function draw(){
 function fitScale(){return Math.min(area.clientWidth/g.width,area.clientHeight/g.height)*.98;}
 function reset(){if(!g)return;const w=area.clientWidth,h=area.clientHeight;scale=fitScale();panX=(w-g.width*scale)/2;panY=(h-g.height*scale)/2;moved=false;tip.style.display='none';schedule();}
 function fit(){if(!g)return;const w=Math.max(200,(document.documentElement.clientWidth||window.innerWidth)-LEGEND);
- const h=Math.round(Math.max(MIN_HEIGHT,Math.min(900,w*g.height/g.width)));if(h!==plotHeight){plotHeight=h;wrap.style.height=h+'px';send('streamlit:setFrameHeight',{height:h+40});}}
+ const h=Math.round(Math.max(MIN_HEIGHT,Math.min(maxHeight,w*g.height/g.width)));if(h!==plotHeight){plotHeight=h;wrap.style.height=h+'px';send('streamlit:setFrameHeight',{height:h+40});}}
 function load(geo){
  const P=geo.positions==='<f4'?Float32Array:Uint16Array;  // squares (bins) keep exact float positions
  g={...geo};g.px=decode(geo.px,P);g.py=decode(geo.py,P);g.slice=decode(geo.slice,Uint8Array);
@@ -189,6 +191,8 @@ canvas.addEventListener('dblclick',reset);document.getElementById('reset').oncli
 clearButton.onclick=()=>{highlight=null;dirty=true;schedule();};
 document.getElementById('save').onclick=()=>{const a=document.createElement('a');a.download=filename+'.png';a.href=canvas.toDataURL('image/png');a.click();};
 window.addEventListener('message',event=>{if(event.source!==parent||event.data.type!=='streamlit:render')return;const args=event.data.args,p=args.packet;if(!p)return;
+ // Set before a new geometry is loaded, so its first fit already uses the cap.
+ const cap=Number.isFinite(args.max_height)?Math.max(MIN_HEIGHT,args.max_height):MAX_HEIGHT;if(cap!==maxHeight){maxHeight=cap;fit();}
  if(args.geometry&&version!==p.version){load(args.geometry);version=p.version;seq=-1;}
  if(!g||version!==p.version){send('streamlit:setComponentValue',{value:{client,version:null,seq:-1}});return;}
  let changed=false;
